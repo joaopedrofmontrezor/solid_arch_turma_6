@@ -1,45 +1,47 @@
 const User = require('../models/User')
 const bcrypt = require('bcrypt')
 const createUserToken = require('../helpers/create-user-token')
+const getToken = require('../helpers/get-tokens')
+const { JsonWebTokenError } = require('jsonwebtoken')
 
 module.exports = class UserController {
     static async register(req, res) {
         const { name, email, phone, password, confirmpassword } = req.body
 
         if (!name) {
-            res.status(422).json({message: 'Nome é obrigatório'})
+            res.status(422).json({ message: 'Nome é obrigatório'})
             return
         }
 
         if (!email) {
-            res.status(422).json({message: 'Email é obrigatório'})
+            res.status(422).json({ message: 'Email é obrigatório'})
             return
         }
 
         if (!phone) {
-            res.status(422).json({message: 'Telefone é obrigatório'})
+            res.status(422).json({ message: 'Telefone é obrigatório'})
             return
         }
 
         if (!password) {
-            res.status(422).json({message: 'Senha é obrigatório'})
+            res.status(422).json({ message: 'Senha é obrigatório'})
             return
         }
 
         if (!confirmpassword) {
-            res.status(422).json({message: 'Confirmação de senha é obrigatório'})
+            res.status(422).json({ message: 'Confirmação de senha é obrigatório'})
             return
         }
 
         if (password !== confirmpassword) {
-            res.status(422).json({message: 'As senhas não coincidem'})
+            res.status(422).json({ message: 'As senhas não coincidem'})
             return
         }
 
-        const userExist = await User.findOne({email:email})
+        const userExists = await User.findOne({ email:email})
 
-        if(userExist) {
-            res.status(422).json({message: 'O usuário já existe em nossos registros.'})
+        if (userExists) {
+            res.status(422).json({ message: 'O usuário já existe em nossos registros.'})
             return
         }
 
@@ -50,46 +52,63 @@ module.exports = class UserController {
             name,
             email,
             phone,
-            password : passwordHash,
+            password: passwordHash,
         })
         
-        try{
+        try {
             const newUser = await user.save()
             await createUserToken(newUser, req, res)
         } catch (error) {
-            res.status(503).json({message: error})
+            res.status(503).json({ message: error })
         }
     }
 
-    static async login(req, res){
-        const {email, password } = req.body
+    static async login(req, res) {
+        const { email, password } = req.body
 
         if (!email) {
-            res.status(422).json({message: 'Email é obrigatório'})
+            res.status(422).json({ message: 'Email é obrigatório'})
             return
         }
         if (!password) {
-            res.status(422).json({message: 'Senha é obrigatório'})
+            res.status(422).json({ message: 'Senha é obrigatório'})
             return
         }
-        const userExists = await User.findOne({email:email})
+        const userExists = await User.findOne({ email: email })
 
-        if(userExists){
+        if (!userExists) {
             res.status(401).json({
-                message:'Não autorizado, sem registro'
+                message: 'Não autorizado, sem registro'
             })
             return
         }
 
-        const checkPassword = await bcrypt.compare(password, userExist.password)
+        const checkPassword = await bcrypt.compare(password, userExists.password)
 
         if (!checkPassword) {
             res.status(401).json({
-                message:'Não autorizado, sem registro'
+                message: 'Não autorizado, sem registro'
             })
             return
         }
 
         await createUserToken(userExists, req, res)
+    }
+
+    static async checkUser(req, res){
+        let currentUser
+        console.log(req.headers.authorization)
+
+        if(req.headers.authorization){
+            const token = getToken(req)
+            const decoded = jwt.verify(token, 'fatec-turma6-a2026')
+
+            currentUser = await User.findById(decoded.id)
+            currentUser.password = undefined
+        }else{
+            currentUser = null
+        }
+
+        res.status(200).send(currentUser)
     }
 }
